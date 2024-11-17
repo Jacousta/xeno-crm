@@ -1,10 +1,11 @@
-# Mini CRM Backend
+# Mini CRM Backend and Frontend
 
 This repository contains the backend services for the Mini CRM application, including the API backend and the consumer server. Both services are built using Node.js and utilize MongoDB for data storage and RabbitMQ (hosted on CloudAMQP) for message brokering.
 
 ## Tech Stack
 
 - **Backend Framework:** Node.js
+- **Frontend:** Next.Js
 - **Database:** MongoDB
 - **Message Broker:** RabbitMQ (hosted on CloudAMQP)
 - **Hosting:** Railway
