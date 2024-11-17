@@ -12,7 +12,6 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
-app.options('*', cors()); // Allow OPTIONS requests
 
 app.use('/api/data-ingestion', dataIngestionRoutes);
 app.use('/api/campaigns', campaignRoutes);

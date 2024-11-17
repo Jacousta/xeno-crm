@@ -12,7 +12,6 @@ const ingestCustomerData = async (req, res) => {
     await customer.validate();
 
     await publishToQueue({ type: "customer", data: customerData });
-
     res.status(200).send("Customer data received");
   } catch (error) {
     res.status(400).send(`Validation error: ${error.message}`);

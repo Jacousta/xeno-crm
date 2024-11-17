@@ -1,97 +1,85 @@
 const { getDB } = require("../config/db");
 
+const validateRules = (rules) => {
+    if (!Array.isArray(rules)) throw new Error("Rules must be an array.");
+    rules.forEach((rule, index) => {
+        if (!rule.field || !rule.operator || rule.value === undefined || !rule.condition) {
+            throw new Error(`Rule at index ${index} is missing required properties.`);
+        }
+    });
+};
+
+const parseValue = (field, value) => {
+    switch (field) {
+        case "last_visit":
+            return new Date(value);
+        case "visits":
+            return parseInt(value, 10);
+        case "total_spends":
+            return parseFloat(value);
+        default:
+            return value;
+    }
+};
+
+const getMongoOperator = (operator, value, isDate) => {
+    const ops = {
+        ">": { $gt: value },
+        "<": { $lt: value },
+        "=": isDate ? { $gte: value.startOfDay, $lt: value.endOfDay } : value,
+        "!=": { $ne: value },
+        ">=": { $gte: value },
+        "<=": { $lte: value },
+    };
+    return ops[operator];
+};
+
 const getAudienceSizeHandler = async (rules) => {
-  const db = getDB();
+    validateRules(rules);
 
-  let andConditions = [];
-  let orConditions = [];
+    const db = getDB();
+    let andConditions = [];
+    let orConditions = [];
 
-  rules.forEach((rule) => {
-    let condition = {};
-    let value = rule.value;
+    rules.forEach((rule) => {
+        let condition = {};
+        let value = parseValue(rule.field, rule.value);
 
-    if (rule.field === "last_visit") {
-      value = new Date(value);
-      let startOfDay = new Date(value.setUTCHours(0, 0, 0, 0));
-      let endOfDay = new Date(value.setUTCHours(23, 59, 59, 999));
+        if (rule.field === "last_visit") {
+            const startOfDay = new Date(value.setUTCHours(0, 0, 0, 0));
+            const endOfDay = new Date(value.setUTCHours(23, 59, 59, 999));
+            value = { startOfDay, endOfDay };
+        }
 
-      switch (rule.operator) {
-        case ">":
-          condition[rule.field] = { $gt: endOfDay };
-          break;
-        case "<":
-          condition[rule.field] = { $lt: startOfDay };
-          break;
-        case "=":
-          condition[rule.field] = { $gte: startOfDay, $lt: endOfDay };
-          break;
-        case "!=":
-          condition[rule.field] = { $not: { $gte: startOfDay, $lt: endOfDay } };
-          break;
-        case ">=":
-          condition[rule.field] = { $gte: startOfDay };
-          break;
-        case "<=":
-          condition[rule.field] = { $lte: endOfDay };
-          break;
-      }
-    } else {
-      if (rule.field === "visits") {
-        value = parseInt(value, 10);
-      } else if (rule.field === "total_spends") {
-        value = parseFloat(value);
-      }
+        condition[rule.field] = getMongoOperator(rule.operator, value, rule.field === "last_visit");
 
-      switch (rule.operator) {
-        case ">":
-          condition[rule.field] = { $gt: value };
-          break;
-        case "<":
-          condition[rule.field] = { $lt: value };
-          break;
-        case "=":
-          condition[rule.field] = value;
-          break;
-        case "!=":
-          condition[rule.field] = { $ne: value };
-          break;
-        case ">=":
-          condition[rule.field] = { $gte: value };
-          break;
-        case "<=":
-          condition[rule.field] = { $lte: value };
-          break;
-      }
+        if (rule.condition === "AND") {
+            andConditions.push(condition);
+        } else if (rule.condition === "OR") {
+            orConditions.push(condition);
+        }
+    });
+
+    const query = {};
+    if (andConditions.length) query.$and = andConditions;
+    if (orConditions.length) query.$or = orConditions;
+
+    try {
+        return await db.collection("customers").countDocuments(query);
+    } catch (error) {
+        console.error("Error querying audience size:", error);
+        throw new Error("Failed to calculate audience size.");
     }
-
-    if (rule.condition === "AND") {
-      andConditions.push(condition);
-    } else if (rule.condition === "OR") {
-      orConditions.push(condition);
-    }
-  });
-
-  let query = {};
-  if (andConditions.length > 0) query.$and = andConditions;
-  if (orConditions.length > 0) query.$or = orConditions;
-
-  try {
-    const audienceSize = await db.collection("customers").countDocuments(query);
-    return audienceSize;
-  } catch (error) {
-    throw new Error(error.message);
-  }
 };
 
 const getAudienceSize = async (req, res) => {
-  const { rules } = req.body;
-  try {
-    const audienceSize = await getAudienceSizeHandler(rules);
-    console.log(audienceSize)
-    res.json({ size: audienceSize });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    const { rules } = req.body;
+    try {
+        const audienceSize = await getAudienceSizeHandler(rules);
+        res.json({ size: audienceSize });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 };
 
 module.exports = { getAudienceSize, getAudienceSizeHandler };

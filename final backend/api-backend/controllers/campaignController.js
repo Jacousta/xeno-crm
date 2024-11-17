@@ -1,116 +1,112 @@
+const axios = require("axios");
 const { getDB } = require("../config/db");
 const { publishToQueue } = require("../services/pubsubService");
 const { getAudienceSizeHandler } = require("./audienceController");
 const { sendToVendorAPI } = require("../services/vendorApi");
 
+// Create a new campaign and log the communication details
 const createCampaign = async (req, res) => {
   const { campaignName, campaignMessage, rules } = req.body;
-  console.log(req.body)
   const db = getDB();
-  if (!db) {
-    throw new Error("Database connection failed");
-  }
 
   try {
+    // Fetch audience size based on the provided rules
     const audienceSize = await getAudienceSizeHandler(rules);
 
+    // Prepare communication log for inserting into the database
     const communicationLog = {
       campaignName,
       campaignMessage,
-      audienceRules: rules, //[{},{}]
+      audienceRules: rules,
       audienceSize,
-      deliveryStatus: "Pending",
+      deliveryStatus: "Pending", // The campaign is pending for delivery
       createdAt: new Date(),
       sentCount: 0,
       failedCount: 0,
     };
 
+    // Insert the communication log into the database
     const result = await db
       .collection("communication_log")
       .insertOne(communicationLog);
 
-      console.log("___________",result)
+    // Retrieve the ID of the newly inserted communication log
     const communicationId = result.insertedId;
+
+    // Send campaign messages internally (start the process of sending messages to the audience)
     await sendCampaignMessagesInternal(communicationId);
 
     res
       .status(201)
-      .json({message:"Communication log created and messages are being sent"});
+      .send("Communication log created and messages are being sent");
   } catch (error) {
-    res.status(500).json({ error });
+    // If there's an error, return a 500 server error with the error message
+    console.error("Error creating campaign:", error);
+    res.status(500).json({ error: error.message });
   }
 };
 
+// Internal function to send campaign messages to the audience
 const sendCampaignMessagesInternal = async (communicationId) => {
-  const db = getDB();
-  const communicationLog = await db
-    .collection("communication_log")
-    .findOne({ _id: communicationId });
+  try {
+    const db = getDB();
+    const communicationLog = await db
+      .collection("communication_log")
+      .findOne({ _id: communicationId });
 
-  if (!communicationLog) {
-    throw new Error("Communication log not found");
-  }
+    if (!communicationLog) {
+      throw new Error("Communication log not found");
+    }
 
-  const { audienceRules, campaignMessage } = communicationLog;
-  console.log(audienceRules)
-  let audience = [];
-  if (!audienceRules || audienceRules.length === 0) {
-    audience = await db.collection("customers").find().toArray();
-  } else {
-    console.log("queryyy")
-    const mongoQuery = parseAudienceRules(audienceRules);
-    console.log("Parsed MongoDB query:", mongoQuery);
-    console.log(
-      "Sending messages to audience:",
-      JSON.stringify("***",audienceRules, null, 2)
-    );
-    console.log("MongoDB Query:", JSON.stringify(mongoQuery, null, 2));
-    audience = await db
-      .collection("customers")
-      .find({ $and: mongoQuery })
-      .toArray();
-  }
+    const { audienceRules, campaignMessage } = communicationLog;
+    let audience = [];
 
-  console.log("Audience size:", audience.length);
+    if (!audienceRules || audienceRules.length === 0) {
+      audience = await db.collection("customers").find().toArray();
+    } else {
+      const mongoQuery = parseAudienceRules(audienceRules);
+      console.log("Sending messages to audience:", JSON.stringify(audienceRules, null, 2));
+      console.log("MongoDB Query:", JSON.stringify(mongoQuery, null, 2));
+      audience = await db
+        .collection("customers")
+        .find({ $and: mongoQuery })
+        .toArray();
+    }
 
-  const messages = audience.map((customer) => ({
-    customerId: customer._id,
-    message: campaignMessage.replace("{customer_name}", customer.name),
-  }));
+    console.log("Audience size:", audience.length);
 
-  for (const message of messages) {
-    await sendToVendorAPI(message.message, communicationId, message.customerId);
+    const messages = audience.map((customer) => ({
+      customerId: customer._id,
+      message: campaignMessage.replace("{customer_name}", customer.name),
+    }));
+
+    for (const message of messages) {
+      await sendToVendorAPI(message.message, communicationId, message.customerId);
+    }
+  } catch (error) {
+    console.error("Error in sendCampaignMessagesInternal:", error.message);
+    throw new Error(`Error in sending campaign messages: ${error.message}`);
   }
 };
 
+// Get a list of all campaigns from the communication log
 const getCampaigns = async (req, res) => {
   const db = getDB();
   const communications = await db
     .collection("communication_log")
     .find()
-    .sort({ createdAt: -1 })
+    .sort({ createdAt: -1 }) // Sort by the most recent first
     .toArray();
   res.status(200).json(communications);
 };
 
+// Parse the audience rules into a MongoDB query format
 const parseAudienceRules = (rules) => {
-  // Ensure rules is an array
-  if (!Array.isArray(rules)) {
-    throw new Error("Expected 'rules' to be an array");
-  }
-
   const mongoQuery = rules.map((rule) => {
     const { field, operator, value } = rule;
-
-    // Validate the rule structure
-    if (!field || !operator || value === undefined) {
-      throw new Error(`Invalid rule format: ${JSON.stringify(rule)}`);
-    }
-
     let mongoOperator;
     let parsedValue = value;
 
-    // Map the operator to MongoDB's operator
     switch (operator) {
       case ">":
         mongoOperator = "$gt";
@@ -125,6 +121,7 @@ const parseAudienceRules = (rules) => {
         mongoOperator = "$lte";
         break;
       case "==":
+      case "=":  // Accept "=" as a valid operator, mapping to "$eq"
         mongoOperator = "$eq";
         break;
       case "!=":
@@ -134,24 +131,16 @@ const parseAudienceRules = (rules) => {
         throw new Error(`Unsupported operator: ${operator}`);
     }
 
-    // Handle special field types (e.g., date)
     if (field === "last_visit") {
-      parsedValue = new Date(value);
-      if (isNaN(parsedValue)) {
-        throw new Error(`Invalid date format for last_visit: ${value}`);
-      }
+      parsedValue = new Date(value); // If the field is "last_visit", parse the date
     } else {
-      // For numeric fields, ensure value can be parsed into a float
-      parsedValue = parseFloat(value);
-      if (isNaN(parsedValue)) {
-        throw new Error(`Invalid numeric value for field "${field}": ${value}`);
-      }
+      parsedValue = parseFloat(value); // Otherwise, parse it as a number
     }
 
-    // Return the MongoDB query part for the field
     return { [field]: { [mongoOperator]: parsedValue } };
   });
 
   return mongoQuery;
 };
+
 module.exports = { createCampaign, getCampaigns };

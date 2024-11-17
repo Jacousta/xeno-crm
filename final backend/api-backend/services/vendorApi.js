@@ -1,21 +1,28 @@
-const axios = require("axios");
-const { publishToQueue } = require("./pubsubService");
-const { deliveryApiService } = require("./deliveryReceiptApi");
+const { deliveryApiService } = require('./deliveryReceiptApi');
 
 const sendToVendorAPI = async (message, communicationId, customerId) => {
   try {
     const status = Math.random() < 0.9 ? "SENT" : "FAILED";
-    console.log("Message sent to vendor API:", message, "Status:", status);
+    console.log(
+      `Simulated vendor API response for customer ${customerId}: ${status}`
+    );
 
     await deliveryApiService(communicationId, customerId, status);
-
     return { status };
   } catch (error) {
-    console.error("Error sending message to vendor API", error);
+    console.error(
+      `Error sending message for customer ${customerId} to vendor API:`,
+      error.message
+    );
 
-    await deliveryApiService(communicationId, customerId, "FAILED");
+    // Log the failure status for delivery receipt.
+    try {
+      await deliveryApiService(communicationId, customerId, "FAILED");
+    } catch (deliveryError) {
+      console.error("Error sending delivery receipt for failure:", deliveryError.message);
+    }
 
-    return { status: "FAILED" };
+    return { status: "FAILED" }; // Return status as "FAILED" in case of error.
   }
 };
 
