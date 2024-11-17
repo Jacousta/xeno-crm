@@ -1,318 +1,160 @@
 "use client";
 
-import { useState, ChangeEvent, FormEvent, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { createCampaign, checkAudienceSize } from "../../utils/api";
+import { useState, useEffect } from "react";
+import CampaignCard from "../../components/CampaignCard";
+import { fetchCampaigns } from "../../utils/api";
 import { toast } from "react-toastify";
 
-// Interfaces for rules and audience structure
-interface Rule {
+interface AudienceRule {
   field: string;
   operator: string;
   value: string;
   condition: string;
 }
 
-interface Audience {
+interface Campaign {
+  _id: string;
   campaignName: string;
   campaignMessage: string;
-  rules: Rule[];
+  audienceRules: AudienceRule[];
+  audienceSize: number;
+  deliveryStatus: string;
+  sentCount: number;
+  failedCount: number;
+  createdAt: string;
 }
 
-// Available fields and operators for the rules
-const availableFields = [
-  { label: "Total Spends", value: "total_spends" },
-  { label: "Visits", value: "visits" },
-  { label: "Last Visit", value: "last_visit" },
-];
+export default function Campaigns() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [selectedRules, setSelectedRules] = useState<AudienceRule[] | null>(
+    null
+  );
+  const [loading, setLoading] = useState(true);
 
-const operators = [
-  { label: "Equals", value: "=" },
-  { label: "Not Equals", value: "!=" },
-  { label: "Greater Than", value: ">" },
-  { label: "Less Than", value: "<" },
-  { label: "Greater or Equals", value: ">=" },
-  { label: "Less or Equals", value: "<=" },
-];
-
-export default function CreateAudience() {
-  const [audience, setAudience] = useState<Audience>({
-    campaignName: "",
-    campaignMessage: "",
-    rules: [],
-  });
-  const [audienceSize, setAudienceSize] = useState<number | null>(null);
-  const router = useRouter();
-
-  // Fetch audience size when rules change
-  useEffect(() => {
-    const fetchAudienceSize = async () => {
-      try {
-
-        const hasIncompleteRules = audience.rules.some(
-          (rule) => !rule.value || !rule.operator || !rule.field
-        );
-  
-        if (hasIncompleteRules) {
-          setAudienceSize(null); // Show 'Calculating...' or default
-          return;
-        }   
-
-        const size = await checkAudienceSize(audience);  // Assuming this function checks audience size
-        setAudienceSize(size);  // Set the fetched size
-      } catch (error) {
-        console.error("Failed to check audience size:", error);
-      }
-    };
-
-    // Only fetch audience size if there are any rules
-    if (audience.rules.length > 0) {
-      fetchAudienceSize();
-    } else {
-      setAudienceSize(2);  // Default size when no rules are added (assuming you want at least 2)
-    }
-  }, [audience.rules]);
-
-  // Add a new rule to the audience
-  const addRule = () => {
-    setAudience({
-      ...audience,
-      rules: [
-        ...audience.rules,
-        {
-          field: availableFields[0].value,
-          operator: operators[0].value,
-          value: "",
-          condition: "AND",
-        },
-      ],
-    });
-  };
-
-  // Remove a rule from the audience
-  const removeRule = (index: number) => {
-    const rules = [...audience.rules];
-    rules.splice(index, 1);
-    setAudience({ ...audience, rules });
-  };
-
-  // Handle changes to any rule
-  const handleChange =
-    (index: number, field: string) =>
-    (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const rules = [...audience.rules];
-      rules[index] = { ...rules[index], [field]: e.target.value };
-      setAudience({ ...audience, rules });
-    };
-
-  // Handle changes to campaign name and message
-  const handleCampaignNameChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setAudience({ ...audience, campaignName: e.target.value });
-  };
-
-  const handleCampaignMessageChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setAudience({ ...audience, campaignMessage: e.target.value });
-  };
-
-  // Handle the form submission
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-
-    // Ensure audience size is valid before submitting
-    if (audienceSize === null || audienceSize <= 0) {
-      toast.error("Audience size is too small to create a campaign.");
-      return;
-    }
-    console.log("audience", audience)
-
+  const getCampaigns = async () => {
     try {
-      await createCampaign(audience);  // Assuming this is the correct API function
-      toast.success("Campaign created successfully");
-      router.push("/campaigns");  // Redirect to the campaigns page
-    } catch (error:any) {
-      console.error("Error creating campaign:", error);
-      toast.error(`Failed to create campaign: ${error}`);
+      setLoading(true)
+      const data = await fetchCampaigns();
+      setCampaigns(data);
+    } catch (error) {
+      console.error("Error fetching campaigns:", error);
+    } finally {
+      setLoading(false)
     }
   };
+
+  useEffect(() => {
+    getCampaigns();
+  }, []);
 
   return (
-    <div className="container mx-auto">
-      <h1 className="text-4xl font-bold mb-8 text-gray-800">Create Campaign</h1>
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-6 bg-white p-8 shadow-lg rounded-lg"
-      >
-        <div className="space-y-4">
-          <div>
-            <label
-              htmlFor="campaignName"
-              className="block text-gray-700 font-semibold mb-2"
-            >
-              Campaign Name
-            </label>
-            <input
-              type="text"
-              id="campaignName"
-              placeholder="Campaign Name"
-              value={audience.campaignName}
-              onChange={handleCampaignNameChange}
-              className="w-full p-3 border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="campaignMessage"
-              className="block text-gray-700 font-semibold mb-2"
-            >
-              Campaign Message
-            </label>
-            <input
-              type="text"
-              id="campaignMessage"
-              placeholder="Campaign Message (e.g., Hi {customer_name}, here is your 10% discount)"
-              value={audience.campaignMessage}
-              onChange={handleCampaignMessageChange}
-              className="w-full p-3 border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-4xl font-semibold text-gray-900 tracking-tight">
+          Campaigns
+        </h1>
+        <button
+          onClick={() => {
+            toast.success("Campaigns refreshed");
+            getCampaigns();
+          }}
+          className="flex items-center px-5 py-2 bg-xenoBlue text-white font-medium rounded-lg shadow-md hover:bg-indigo-600 transition-all duration-300 ease-in-out"
+        >
+          <svg className="w-5 h-5 mx-2" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" />
+          </svg>
+          <span className="mx-1">Refresh</span>
+        </button>
+      </div>
 
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-800">
-            Add Campaign Audience Rules
-          </h2>
-          {audience.rules.length === 0 ? (
-            <div className="p-4 bg-blue-100 text-blue-700 rounded-lg border border-blue-500">
-              <p>All customers will be included if no rules are added.</p>
-            </div>
-          ) : (
-            audience.rules.map((rule, index) => (
-              <div key={index} className="flex space-x-4 items-center">
-                <select
-                  value={rule.field}
-                  onChange={handleChange(index, "field")}
-                  className="flex-1 p-3 border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {availableFields.map((field) => (
-                    <option key={field.value} value={field.value}>
-                      {field.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={rule.operator}
-                  onChange={handleChange(index, "operator")}
-                  className="flex-1 p-3 border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {operators.map((operator) => (
-                    <option key={operator.value} value={operator.value}>
-                      {operator.label}
-                    </option>
-                  ))}
-                </select>
-                {rule.field === "last_visit" ? (
-                  <input
-                    type="date"
-                    value={rule.value}
-                    onChange={handleChange(index, "value")}
-                    className="flex-1 p-3 border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    placeholder="Value"
-                    value={rule.value}
-                    onChange={handleChange(index, "value")}
-                    className="flex-1 p-3 border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                )}
-                {index > 0 && (
-                  <select
-                    value={rule.condition}
-                    onChange={handleChange(index, "condition")}
-                    className="flex-1 p-3 border border-gray-300 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="AND">AND</option>
-                    <option value="OR">OR</option>
-                  </select>
-                )}
-                <button
-                  type="button"
-                  onClick={() => removeRule(index)}
-                  className="p-2 text-red-600 hover:text-red-800 transition-all"
-                >
-                  <svg
-                    aria-hidden="true"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    className="h-6 w-6"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            ))
-          )}
-          <div className="flex space-x-4">
+      {loading ? (
+        <div role="status" className="flex justify-center items-center py-10">
+          <svg
+            aria-hidden="true"
+            className="w-12 h-12 text-blue-600 animate-spin"
+            viewBox="0 0 100 101"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+              fill="currentColor"
+            />
+            <path
+              d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+              fill="currentFill"
+            />
+          </svg>
+          <span className="sr-only">Loading...</span>
+        </div>
+      ) : campaigns.length === 0 ? (
+        <div className="text-center text-gray-500">
+          <p>No past campaigns found.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg shadow-md">
+          <table className="min-w-full table-auto bg-white border border-gray-200 rounded-lg">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-sm font-semibold text-gray-700 text-left">Campaign Name</th>
+                <th className="px-6 py-3 text-sm font-semibold text-gray-700 text-left">Campaign Message</th>
+                <th className="px-6 py-3 text-sm font-semibold text-gray-700 text-left">Audience</th>
+                <th className="px-6 py-3 text-sm font-semibold text-gray-700 text-left">Status</th>
+                <th className="px-6 py-3 text-sm font-semibold text-gray-700 text-left">Audience Rules</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm text-gray-600">
+              {campaigns.map((campaign) => (
+                <CampaignCard
+                  key={campaign._id}
+                  campaign={campaign}
+                  onViewRules={setSelectedRules}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selectedRules && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md relative transition-all transform scale-95 hover:scale-100 duration-300 ease-in-out">
+            <h3 className="text-2xl font-bold mb-6 text-gray-800">Audience Rules</h3>
+            {selectedRules.length === 0 ? (
+              <p className="text-gray-700 font-medium">All customers</p>
+            ) : (
+              <ul className="space-y-4">
+                {selectedRules.map((rule, index) => (
+                  <li key={index} className="p-4 border rounded-lg bg-gray-100">
+                    <p className="text-gray-700 font-medium">
+                      {rule.field} {rule.operator} {rule.value} ({rule.condition})
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
             <button
-              type="button"
-              onClick={addRule}
-              className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 transition-all flex items-center"
+              onClick={() => setSelectedRules(null)}
+              className="absolute -top-4 -right-4 bg-blue-600 text-white rounded-full p-3 hover:bg-blue-700 transition-colors duration-200"
             >
               <svg
-                aria-hidden="true"
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
-                className="h-6 w-6 mr-2"
               >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M12 4v16m8-8H4"
+                  d="M6 18L18 6M6 6l12 12"
                 />
               </svg>
-              Add Rule
             </button>
           </div>
         </div>
-
-        <div className="flex justify-between items-center mt-6">
-          <button
-            type="submit"
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-all flex items-center"
-          >
-            <svg
-              aria-hidden="true"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              className="h-6 w-6 mr-2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-            Send Campaign
-          </button>
-          <div className="bg-gray-100 p-4 rounded-lg shadow-md">
-            <p className="text-lg font-semibold text-gray-800">
-              Audience Size:{" "}
-              {audienceSize !== null ? audienceSize : "Calculating..."}
-            </p>
-          </div>
-        </div>
-      </form>
-    </div>
-  );
+      )}
+    </div>
+  );
 }
