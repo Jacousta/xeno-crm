@@ -23,8 +23,5 @@ provider.setCustomParameters({
   prompt: "select_account ",
 });
 export const auth = getAuth();
-export const googleProvider = () =>{
-  console.log("loggin in")
-  signInWithPopup(auth, provider)
-};
+export const googleProvider = () => signInWithPopup(auth, provider);
 export type { User };

@@ -23,12 +23,12 @@ const NavBar = () => {
   };
 
   return (
-    <header className="flex items-center h-20 px-6 sm:px-10 bg-white shadow-lg">
+    <header className="relative flex items-center h-20 px-6 sm:px-10 bg-white shadow-md">
       <button
         onClick={() => setMenuOpen(!menuOpen)}
-        className="block sm:hidden relative flex-shrink-0 p-2 mr-2 text-gray-600 hover:bg-gray-100 hover:text-gray-800 focus:bg-gray-100 focus:text-gray-800 rounded-full"
+        className="block sm:hidden relative flex-shrink-0 p-2 mr-2 text-gray-600 hover:bg-gray-200 hover:text-gray-800 focus:bg-gray-200 focus:text-gray-800 rounded-full transition-all duration-300"
+        aria-label="Toggle menu"
       >
-        <span className="sr-only">Menu</span>
         <svg
           aria-hidden="true"
           fill="none"
@@ -44,13 +44,19 @@ const NavBar = () => {
           />
         </svg>
       </button>
-      <div className="inline-flex items-center p-2 px-2 bg-xenoBlue bg-opacity-10 focus:bg-gray-100 rounded-lg">
+      
+      <div
+        onClick={() => router.push("/dashboard")}
+        className="inline-flex items-center p-2 px-2 bg-xenoBlue bg-opacity-10 focus:bg-gray-100 rounded-lg cursor-pointer"
+        aria-label="Go to Dashboard"
+      >
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold mb-2">
           Xeno Mini CRM
         </h1>
       </div>
-      <div className="flex flex-shrink-0 items-center ml-auto">
-        <button className="inline-flex items-center p-2 hover:bg-gray-100 focus:bg-gray-100 rounded-lg">
+
+      <div className="flex flex-shrink-0 items-center ml-auto space-x-3">
+        <button className="inline-flex items-center p-2 hover:bg-gray-100 focus:bg-gray-100 rounded-lg transition-all duration-300">
           <span className="sr-only">User Menu</span>
           <div className="hidden md:flex md:flex-col md:items-end md:leading-tight">
             <span className="font-semibold">{user?.displayName || "User"}</span>
@@ -62,17 +68,18 @@ const NavBar = () => {
                 user?.photoURL ||
                 "https://www.floresdevida.org/wp-content/uploads/2018/06/default-user-thumbnail-1.png"
               }
-              alt="user profile photo"
+              alt="User profile photo"
               className="h-full w-full object-cover"
             />
           </span>
         </button>
+
         <div className="border-l pl-3 ml-3 space-x-1">
           <button
             onClick={signOut}
-            className="relative p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:bg-gray-100 focus:text-gray-600 rounded-full"
+            className="relative p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:bg-gray-100 focus:text-gray-600 rounded-full transition-all duration-300"
+            aria-label="Log out"
           >
-            <span className="sr-only">Log out</span>
             <svg
               aria-hidden="true"
               fill="none"
@@ -90,6 +97,7 @@ const NavBar = () => {
           </button>
         </div>
       </div>
+
       {menuOpen && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -97,7 +105,7 @@ const NavBar = () => {
           exit={{ opacity: 0, y: -20 }}
           className="absolute top-20 left-0 right-0 bg-white shadow-lg sm:hidden"
         >
-          <div className="flex flex-col space-y-1 p-2">
+          <div className="flex flex-col space-y-2 p-4">
             {menuItems.map((item) => (
               <a
                 key={item.name}
@@ -106,10 +114,10 @@ const NavBar = () => {
                   setMenuOpen(false);
                   router.push(item.href);
                 }}
-                className="flex items-center p-2 hover:bg-gray-100 focus:bg-gray-100 rounded-lg"
+                className="flex items-center p-3 text-gray-700 hover:bg-gray-100 focus:bg-gray-100 rounded-lg transition-all duration-200"
               >
                 {item.svg}
-                <span className="ml-2">{item.name}</span>
+                <span className="ml-3">{item.name}</span>
               </a>
             ))}
           </div>
